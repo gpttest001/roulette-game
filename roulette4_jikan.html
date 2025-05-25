@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アニメーション付きルーレット (時間)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Prevent scroll */
+        }
+
+        .roulette-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background-color: #2d3748; /* Slightly lighter dark */
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            max-width: 90%; /* Responsive width */
+            width: 500px; /* Max width for desktop */
+        }
+
+        canvas {
+            background-color: #eee;
+            display: block;
+            border-radius: 50%; /* Make canvas circular */
+            box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.5);
+            border: 8px solid #4a5568; /* Border around the wheel */
+            touch-action: none; /* Disable default touch actions */
+        }
+
+        .spin-button {
+            background: linear-gradient(145deg, #4CAF50, #45a049); /* Green gradient */
+            color: white;
+            font-size: 1.25rem;
+            font-weight: bold;
+            padding: 0.75rem 2rem;
+            border-radius: 0.75rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            margin-top: 1.5rem;
+            outline: none;
+        }
+
+        .spin-button:hover {
+            background: linear-gradient(145deg, #45a049, #3e8e41);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px -1px rgba(0, 0, 0, 0.15), 0 3px 5px -1px rgba(0, 0, 0, 0.08);
+        }
+
+        .spin-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .result-display {
+            margin-top: 1.5rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #cbd5e0; /* Light gray text */
+            min-height: 3rem; /* Reserve more space */
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="roulette-container">
+        <h1 class="text-3xl font-bold text-white mb-4">時間</h1>
+        <canvas id="rouletteCanvas"></canvas>
+        <button id="spinButton" class="spin-button">スタート</button>
+        <div id="resultDisplay" class="result-display"></div>
+    </div>
+
+    <script>
+        // 定数と変数の宣言
+        const canvas = document.getElementById('rouletteCanvas');
+        const ctx = canvas.getContext('2d');
+        const spinButton = document.getElementById('spinButton');
+        const resultDisplay = document.getElementById('resultDisplay');
+
+        // ==== サウンドファイルのパスを設定 ====
+        // ファイル名をローカルフォルダのファイル名と完全に一致させました。
+        // ファイル名にスペースがある場合は、そのまま含めてください。
+        const tickingSound = new Audio('roulette_tick.mp3'); // ルーレットが回るときのカチカチ音
+        tickingSound.loop = true; // ループ再生
+        tickingSound.volume = 0.24; // 音量を20%小さく調整 (0.3 * 0.8 = 0.24)
+
+        const deceleratingSound = new Audio('roulette_decel.mp3'); // ルーレットが減速するときの音
+        deceleratingSound.loop = false; // ループしない
+        deceleratingSound.volume = 0.6; // 音量を調整
+        let isDeceleratingSoundPlaying = false; // 減速音が再生中かどうかのフラグ
+
+        const resultSound = new Audio('roulette_result.mp3'); // 結果発表のファンファーレ
+        resultSound.volume = 0.5; // 音量を調整
+
+        const startSpinSound = new Audio('start_spin.mp3'); // 開始ボタンクリック時の効果音
+        startSpinSound.volume = 0.7; // 音量を調整
+        // ==== ここまで ====
+
+        // ルーレットの数字と色
+        // 0時から23時までの24項目
+        const rouletteNumbers = [];
+        for (let i = 0; i < 24; i++) {
+            rouletteNumbers.push(`${i}時`);
+        }
+        
+        // 時間帯に対応する色を設定（白い文字の視認性を考慮）
+        const timeColors = {
+            '夜': '#2F4F4F',    // DarkSlateGray (24時/0時〜5時)
+            '朝': '#4682B4',    // SteelBlue (6時〜11時)
+            '昼': '#FF8C00',    // DarkOrange (12時〜17時)
+            '夕方': '#191970'   // MidnightBlue (18時〜23時)
+        };
+
+        // 各時間に割り当てる色
+        const numberColors = {};
+        for (let i = 0; i < 24; i++) {
+            if (i >= 0 && i <= 5) { // 0時(24時)〜5時
+                numberColors[`${i}時`] = timeColors['夜'];
+            } else if (i >= 6 && i <= 11) { // 6時〜11時
+                numberColors[`${i}時`] = timeColors['朝'];
+            } else if (i >= 12 && i <= 17) { // 12時〜17時
+                numberColors[`${i}時`] = timeColors['昼'];
+            } else { // 18時〜23時
+                numberColors[`${i}時`] = timeColors['夕方'];
+            }
+        }
+
+        const numSegments = rouletteNumbers.length; // セグメント数が24に自動的に更新されます
+        const segmentAngle = (2 * Math.PI) / numSegments;
+        let currentRotation = 0;
+        let spinSpeed = 0;
+        let animationFrameId;
+        let isSpinning = false;
+
+        let lastTickingSoundIndex = -1;
+
+        // --- 関数定義 ---
+        function resizeCanvas() {
+            const containerWidth = canvas.parentElement.clientWidth;
+            const size = Math.min(containerWidth * 0.9, 400);
+            canvas.width = size;
+            canvas.height = size;
+            drawRoulette();
+        }
+
+        function showMessageBox(message) {
+            console.log("Result Message: " + message);
+        }
+
+        function hideMessageBox() {
+            // 現在は使用されていないため、変更なし
+        }
+
+        function drawRoulette() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY) * 0.9;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(currentRotation);
+
+            for (let i = 0; i < numSegments; i++) {
+                const startAngle = i * segmentAngle;
+                const endAngle = (i + 1) * segmentAngle;
+                const segmentValue = rouletteNumbers[i]; // 時間を使用
+                const color = numberColors[segmentValue]; // 時間に対応する色を使用
+
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.save();
+                ctx.rotate(startAngle + segmentAngle / 2);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = 'white';
+                // フォントサイズを調整 (0.065から0.075に増加)
+                ctx.font = `${radius * 0.075}px Inter`; 
+                // 文字の位置を調整 (0.8から0.85に増加)
+                ctx.fillText(segmentValue.toString(), radius * 0.85, 5); 
+                ctx.restore();
+            }
+
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 0.15, 0, 2 * Math.PI);
+            ctx.fillStyle = '#4a5568';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(centerX + radius * 0.95, centerY);
+            ctx.lineTo(centerX + radius * 1.05, centerY - 10);
+            ctx.lineTo(centerX + radius * 1.05, centerY + 10);
+            ctx.closePath();
+            ctx.fillStyle = 'yellow';
+            ctx.fill();
+        }
+
+        // スピンアニメーション
+        function animateSpin() {
+            if (!isSpinning) return;
+
+            currentRotation += spinSpeed;
+            spinSpeed *= 0.984;
+
+            // 回転音と減速音の制御
+            if (spinSpeed > 0.03) { // 高速回転中はカチカチ音
+                if (tickingSound.paused) {
+                    tickingSound.play().catch(e => console.log("Ticking sound play error:", e));
+                }
+                if (isDeceleratingSoundPlaying) { // 減速音が再生中なら停止
+                    deceleratingSound.pause();
+                    deceleratingSound.currentTime = 0;
+                    isDeceleratingSoundPlaying = false;
+                }
+                let normalizedRotation = (currentRotation % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+                let effectiveAngle = (2 * Math.PI - normalizedRotation) % (2 * Math.PI);
+                let currentTickingIndex = Math.floor(effectiveAngle / segmentAngle);
+
+                if (currentTickingIndex !== lastTickingSoundIndex) {
+                    const tempTick = new Audio(tickingSound.src);
+                    tempTick.volume = tickingSound.volume;
+                    tempTick.play().catch(e => console.log("Ticking sound play error:", e));
+                    lastTickingSoundIndex = currentTickingIndex;
+                }
+            } else if (spinSpeed > 0.001) { // 減速中は減速音
+                if (!isDeceleratingSoundPlaying) {
+                    tickingSound.pause();
+                    tickingSound.currentTime = 0;
+                    deceleratingSound.play().catch(e => console.log("Decelerating sound play error:", e));
+                    isDeceleratingSoundPlaying = true;
+                }
+            } else { // ほぼ停止したら両方の音を停止
+                tickingSound.pause();
+                tickingSound.currentTime = 0;
+                if (isDeceleratingSoundPlaying) {
+                    deceleratingSound.pause();
+                    deceleratingSound.currentTime = 0;
+                    isDeceleratingSoundPlaying = false;
+                }
+            }
+
+            // 速度が非常に遅くなったら停止
+            if (spinSpeed < 0.001) {
+                cancelAnimationFrame(animationFrameId);
+                isSpinning = false;
+                spinButton.disabled = false;
+                
+                tickingSound.pause();
+                tickingSound.currentTime = 0;
+                deceleratingSound.pause();
+                deceleratingSound.currentTime = 0;
+                isDeceleratingSoundPlaying = false;
+
+                displayResult();
+                resultSound.play().catch(e => console.log("Result sound play error:", e));
+                return;
+            }
+
+            drawRoulette();
+            animationFrameId = requestAnimationFrame(animateSpin);
+        }
+
+        // 結果を表示
+        function displayResult() {
+            let normalizedRotation = (currentRotation % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+            let effectiveAngle = (2 * Math.PI - normalizedRotation) % (2 * Math.PI);
+
+            let winningIndex = Math.floor(effectiveAngle / segmentAngle);
+            if (winningIndex < 0) {
+                winningIndex += numSegments;
+            }
+
+            const winningTime = rouletteNumbers[winningIndex]; // 勝利した時間を取得
+            resultDisplay.textContent = `結果: ${winningTime}`;
+            showMessageBox(`おめでとうございます！\n止まった時間は: ${winningTime} です！`);
+        }
+
+        // --- イベントリスナー ---
+        spinButton.addEventListener('click', () => {
+            if (isSpinning) return;
+
+            isSpinning = true;
+            spinButton.disabled = true;
+            resultDisplay.textContent = '';
+            lastTickingSoundIndex = -1;
+            isDeceleratingSoundPlaying = false;
+
+            // === 音源の初回再生（ブラウザの自動再生ポリシー対策） ===
+            tickingSound.play().catch(e => console.log("Initial ticking sound play blocked:", e));
+            deceleratingSound.play().catch(e => console.log("Initial decelerating sound play blocked:", e));
+            resultSound.play().catch(e => console.log("Initial result sound play blocked:", e));
+            startSpinSound.play().catch(e => console.log("Initial start spin sound play blocked:", e));
+            tickingSound.pause();
+            deceleratingSound.pause();
+            resultSound.pause();
+            startSpinSound.pause();
+            tickingSound.currentTime = 0;
+            deceleratingSound.currentTime = 0;
+            resultSound.currentTime = 0;
+            startSpinSound.currentTime = 0;
+            // === ここまで ===
+
+            startSpinSound.play().catch(e => console.log("Start spin sound play error:", e));
+
+
+            spinSpeed = Math.random() * 0.1 + 0.05;
+
+            const minRevolutions = 5;
+            const randomExtraAngle = Math.random() * (2 * Math.PI);
+            const targetRotation = currentRotation + (minRevolutions * 2 * Math.PI) + randomExtraAngle;
+
+            let tempSpeed = spinSpeed;
+            let expectedRotation = 0;
+            while(tempSpeed > 0.001) {
+                expectedRotation += tempSpeed;
+                tempSpeed *= 0.984;
+            }
+
+            const requiredExtraSpeed = (targetRotation - currentRotation) / expectedRotation;
+            spinSpeed *= Math.max(1, requiredExtraSpeed * 0.5);
+
+            tickingSound.play().catch(e => console.log("Ticking sound play error on start:", e));
+
+            animateSpin();
+        });
+
+        // ウィンドウロード時とリサイズ時にキャンバスを調整
+        window.onload = function() {
+            resizeCanvas();
+            drawRoulette();
+        };
+        window.addEventListener('resize', resizeCanvas);
+    </script>
+</body>
+</html>
