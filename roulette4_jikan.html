@@ -95,16 +95,19 @@
         // ==== サウンドファイルのパスを設定 ====
         // ファイル名をローカルフォルダのファイル名と完全に一致させました。
         // ファイル名にスペースがある場合は、そのまま含めてください。
-        const tickingSound = new Audio('/roulette_tick.mp3'); // ルーレットが回るときのカチカチ音
+        const tickingSound = new Audio('/roulette_tick.mp3'); 
+// ルーレットが回るときのカチカチ音
         tickingSound.loop = true; // ループ再生
         tickingSound.volume = 0.20; // 音量を20%小さく調整 (0.3 * 0.8 = 0.24)
 
-        const deceleratingSound = new Audio('/roulette_decel.mp3'); // ルーレットが減速するときの音
+        const deceleratingSound = new Audio('/roulette_decel.mp3'); 
+// ルーレットが減速するときの音
         deceleratingSound.loop = false; // ループしない
         deceleratingSound.volume = 0.6; // 音量を調整
         let isDeceleratingSoundPlaying = false; // 減速音が再生中かどうかのフラグ
 
-        const resultSound = new Audio('/roulette_result.mp3'); // 結果発表のファンファーレ
+        const resultSound = new Audio('/roulette_result.mp3'); 
+// 結果発表のファンファーレ
         resultSound.volume = 0.5; // 音量を調整
 
         const startSpinSound = new Audio('/start_spin.mp3'); // 開始ボタンクリック時の効果音
