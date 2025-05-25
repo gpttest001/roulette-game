@@ -199,8 +199,8 @@
                 ctx.rotate(startAngle + segmentAngle / 2);
                 ctx.textAlign = 'right';
                 ctx.fillStyle = 'white';
-                ctx.font = `${radius * 0.08}px Inter`; // フォントサイズを調整（テキストが長くなったため少し大きく）
-                ctx.fillText(segmentValue.toString(), radius * 0.8, 5); // 月と季節の位置を調整
+                ctx.font = `${radius * 0.12}px Inter`; // フォントサイズを調整（テキストが長くなったため少し大きく）
+                ctx.fillText(segmentValue.toString(), radius * 0.9, 8); // 月と季節の位置を調整
                 ctx.restore();
             }
 
